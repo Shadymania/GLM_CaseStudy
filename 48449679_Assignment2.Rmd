@@ -1,0 +1,264 @@
+---
+title: "48449679_Assignment2"
+author: "Nabin Atreya Sunar"
+date: "2025-11-01"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r}
+
+
+# Load necessary libraries
+
+library(readxl)   # Excel reading
+library(dplyr)    # Data manipulation
+library(ggplot2)  # Visualization
+library(tidyr)    # Reshaping
+library(forcats)  # Factor handling
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+```{r}
+# Read the Excel dataset once
+
+df <- read_excel("NSW-crash-data.xlsx")
+
+# Rename key columns with simpler names
+
+df <- df %>%
+rename(
+Day         = `Day of week of crash`,
+TimeSlot    = `Two-hour intervals`,
+Urban       = `Urbanisation`,
+Lighting    = `Street lighting`,
+WeatherCond = `Weather`,
+SpeedLimit  = `Speed limit`,
+ImpactType  = `First impact type`,
+Killed      = `No. killed`,
+SeriousInj  = `No. seriously injured`
+)
+
+# Derive common severity flag for later figures
+
+df <- df %>%
+mutate(SeriousFatal = (Killed > 0) | (SeriousInj > 0))
+
+# Quick structure check
+
+str(df)
+
+```
+```{r}
+heat_data <- df %>%
+count(Day, TimeSlot, name = "CrashCount") %>%
+mutate(Day = factor(Day,
+levels = c("Monday","Tuesday","Wednesday",
+"Thursday","Friday","Saturday","Sunday")))
+
+p1 <- ggplot(heat_data, aes(x = TimeSlot, y = Day, fill = CrashCount)) +
+geom_tile(color = "white") +
+scale_fill_gradient(low = "#E0F3DB", high = "#0868AC") +
+labs(title = "Crash Counts by Day × Two-Hour Interval",
+x = "Two-Hour Interval", y = "Day of Week", fill = "Crashes") +
+theme_minimal(base_size = 11) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p1
+ggsave("figure1_heatmap.png", p1, width = 9, height = 5, dpi = 300)
+
+```
+```{r}
+speed_share <- df %>%
+  mutate(SpeedBand = case_when(
+    SpeedLimit <= 50  ~ "≤50",
+    SpeedLimit <= 60  ~ "60",
+    SpeedLimit <= 80  ~ "70–80",
+    SpeedLimit <= 100 ~ "90–100",
+    TRUE ~ "110+"
+  )) %>%
+  group_by(SpeedBand) %>%
+  summarise(Share = mean(SeriousFatal, na.rm = TRUE))
+
+# bar plot
+p2 <- ggplot(speed_share, aes(x = SpeedBand, y = Share * 100, fill = SpeedBand)) +
+  geom_col() +
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Serious/Fatal Share by Speed Band",
+    x = "Speed Band (km/h)",
+    y = "Serious/Fatal Share (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")  # Hides legend if unnecessary
+
+p2
+
+# Save the colorful figure
+ggsave("figure2_speedband.png", p2, width = 7, height = 4.5, dpi = 300)
+
+
+```
+
+```{r}
+urban_share <- df %>%
+  group_by(Urban) %>%
+  summarise(Share = mean(SeriousFatal, na.rm = TRUE))
+
+#  bar plot
+p3 <- ggplot(urban_share, aes(x = reorder(Urban, Share), y = Share * 100, fill = Urban)) +
+  geom_col(color = "black", width = 0.8) +  # black border for contrast
+  coord_flip() +
+  scale_fill_brewer(palette = "Set3") +  
+  labs(
+    title = "Serious/Fatal Share by Urbanisation",
+    x = "Urbanisation Category",
+    y = "Serious/Fatal Share (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "none",           # Hide legend if Urban labels already shown
+    plot.title = element_text(face = "bold", size = 13, hjust = 0.5),
+    axis.text.y = element_text(face = "bold")
+  )
+
+p3
+
+# Save the colorful chart
+ggsave("figure3_urbanisation.png", p3, width = 7, height = 4.5, dpi = 300)
+
+
+```
+
+```{r}
+# Lighting
+light_share <- df %>%
+  filter(!is.na(Lighting)) %>%
+  group_by(Lighting) %>%
+  summarise(Share = mean(SeriousFatal, na.rm = TRUE))
+
+p4a <- ggplot(light_share, aes(
+  x = reorder(Lighting, -Share),
+  y = Share * 100,
+  fill = Lighting
+)) +
+  geom_col(width = 0.75, color = "black") +
+  scale_fill_brewer(palette = "Set2") +  
+  labs(
+    title = "Serious/Fatal Share by Street Lighting",
+    x = "Lighting Condition",
+    y = "Serious/Fatal Share (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 15, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+p4a
+ggsave("figure4a_lighting.png", p4a, width = 6, height = 4.2, dpi = 300)
+
+
+```
+```{r}
+# Weather 
+weather_share <- df %>%
+  filter(!is.na(WeatherCond)) %>%
+  group_by(WeatherCond) %>%
+  summarise(Share = mean(SeriousFatal, na.rm = TRUE))
+
+p4b <- ggplot(weather_share, aes(
+  x = reorder(WeatherCond, -Share),
+  y = Share * 100,
+  fill = WeatherCond
+)) +
+  geom_col(width = 0.8, color = "white", linewidth = 0.6) +
+  scale_fill_manual(values = c(
+    "#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D"
+  )) +
+  labs(
+    title = "Serious/Fatal Share by Weather Condition",
+    x = "Weather Condition",
+    y = "Serious/Fatal Share (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 20, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+p4b
+ggsave("figure4b_weather.png", p4b, width = 6, height = 4.2, dpi = 300)
+
+
+
+```
+```{r}
+impact_data <- df %>%
+  mutate(
+    ImpactType = fct_lump_n(as.factor(ImpactType), n = 8),
+    SeverityGroup = ifelse(SeriousFatal, "Serious/Fatal", "Other")
+  ) %>%
+  count(SeverityGroup, ImpactType, name = "Count") %>%
+  group_by(SeverityGroup) %>%
+  mutate(Percent = Count / sum(Count) * 100)
+
+# Vertical stacked bar chart
+p5 <- ggplot(impact_data, aes(x = reorder(ImpactType, -Percent), y = Percent, fill = SeverityGroup)) +
+  geom_col(position = "stack", color = "black") +
+  labs(
+    title = "First Impact Type Distribution by Severity",
+    x = "Impact Type",
+    y = "Share within Severity Group (%)",
+    fill = "Severity Group"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.text.x = element_text(angle = 25, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold")
+  )
+
+p5
+ggsave("figure5_firstimpact.png", p5, width = 7.5, height = 5, dpi = 300)
+
+
+```
+
+```{r}
+region_counts <- df %>%
+  count(Urban, name = "Crashes")
+
+# Vertical colorful & stylish version
+p6 <- ggplot(region_counts, aes(x = reorder(Urban, -Crashes), y = Crashes, fill = Crashes)) +
+  geom_col(width = 0.75, color = "black", linewidth = 0.4) +
+  scale_fill_gradient(low = "#9ECAE1", high = "#08306B") +  
+  labs(
+    title = "Crash Counts by Region / Urbanisation (Mini-Map Proxy)",
+    x = "Region / Urbanisation",
+    y = "Number of Crashes"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 13),
+    axis.text.x = element_text(angle = 20, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    panel.grid.major.x = element_line(linetype = "dotted", color = "grey70"),
+    panel.grid.major.y = element_blank()
+  )
+
+p6
+ggsave("figure6_minimap.png", p6, width = 7, height = 4.5, dpi = 300)
+
+
+```
+
